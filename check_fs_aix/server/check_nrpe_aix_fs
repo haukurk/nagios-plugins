@@ -1,0 +1,244 @@
+#!/bin/bash
+#
+# Copyright (c) 2013, Haukur Kristinsson
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of Haukur Kristinsson nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL Haukur Kristinsson BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#######################################################################################
+# NAGIOS CHECK PLUGIN FOR check_fs_aix.
+# Author: Haukur Kristinsson 2013
+#
+# Example on a remote AIX server:
+# NRPE COMMAND LINE = 
+#  command[check_fs_verbose]=/usr/nagios/libexec/check_fs_aix -w 90 -c 95 -p jfs -v 
+# Nagios Server side (this script) =
+#  ./check_nrpe19_aix_disks -r serverhostname -x check_fs_verbose -f "/dmsrfr:97:99"
+#######################################################################################
+
+### SECTION - Configuration Variables
+NRPEBIN="/usr/lib64/nagios/plugins/check_nrpe19"
+### EOF SECTION
+
+### SECTION - DO NOT TOUCH THESE VARIABLES!
+RHOSTNAME=
+RCOMMAND=
+FORCELIST=""
+VERBOSE=0
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+STATE_DEPENDENT=4
+EXITSTATUS=$STATE_UNKNOWN # Default Exit Code as UNKNOWN.
+EXITSTATUS=0
+EXITOUTPUT=""
+ENTRYCOUNT=0
+CHECKSTATUS="UNKNOWN"
+DEFAULTWARNINGTHRESHOLD=90
+DEFAULTCRITICALTHRESHOLD=97
+### EOF SECTION
+
+### FUNCTION SECTION
+
+### <summary>
+###  Print out usage help.
+### </summary>
+usage()
+{
+cat << EOF
+usage: $0 options
+
+Nagios check plugin for check_fs_aix.
+
+Tested with NRPE 1.9, on AIX 5.3, 6.1 and 7.1
+
+OPTIONS:
+   -h      Show this message
+   -r      Remote hostname
+   -x      Remote command of check_fs_aix (with -v flag)
+   -w      Default warning level in percentage (without %).
+   -c      Default critical level in percentage (without %).
+   -f      Define forced threshold for filesystems. Ex. "/var:95:99 /tmp:96:99".
+   -v      verbose output (all filesystem status OK;WARNING;CRITICAL)
+EOF
+}
+
+
+### <summary>
+###  Generate the thresholds based on the list of forced filesystems.
+### </summary>
+### <returns>
+###  prints out a threshold string of the format "/filesystem:WARNING:CRITICAL".
+### </returns>
+generatethresholds() {
+       FILESYSTEM=$(echo $1)
+       MATCHED=0
+       FUNCTIONOUTPUT=""
+       for f in $FORCELIST; do
+            FORCEDFILESYSTEM=$(echo $f | cut -d: -f1)
+            FORCEDWARNING=$(echo $f | cut -d: -f2)
+            FORCEDCRITICAL=$(echo $f | cut -d: -f3)
+            if [ $FILESYSTEM = $FORCEDFILESYSTEM ]
+            then
+              FUNCTIONOUTPUT="$FORCEDFILESYSTEM:$FORCEDWARNING:$FORCEDCRITICAL"
+              MATCHED=1
+            fi
+       done
+       if [ $MATCHED -eq 1 ]
+       then
+            echo $FUNCTIONOUTPUT
+       else
+            echo "$FILESYSTEM:$DEFAULTWARNINGTHRESHOLD:$DEFAULTCRITICALTHRESHOLD"
+       fi
+}
+
+
+### <summary>
+###  Filters each check for forced threshold or exclusions.
+###  Updated EXITOUTPUT accordingly.
+### </summary>
+### <returns>
+###  None. 
+### </returns>
+buildoutput() {
+       ARGFILESYSTEM=$(echo $1 | cut -d: -f1)
+       ARGPRC=$(echo $2| tr -d "%") 
+       THRESHOLDS=`generatethresholds $ARGFILESYSTEM`
+       CALCULATEDCRITICAL=$(echo $THRESHOLDS | cut -d: -f3)
+       CALCULATEDWARNING=$(echo $THRESHOLDS | cut -d: -f2)
+       CALCULATEDFS=$(echo $THRESHOLDS | cut -d: -f1)
+       if [ $ARGPRC -gt $CALCULATEDCRITICAL ]
+       then
+          EXITOUTPUT=`echo $EXITOUTPUT "CRITICAL:$CALCULATEDFS:$ARGPRC% "`
+          ENTRYCOUNT=`expr $ENTRYCOUNT + 1`
+          if [ $EXITSTATUS -ne $STATE_CRITICAL ]
+          then
+             EXITSTATUS=$STATE_CRITICAL
+          fi
+       elif [ $ARGPRC -gt $CALCULATEDWARNING ]
+       then
+          EXITOUTPUT=`echo $EXITOUTPUT "WARNING:$CALCULATEDFS:$ARGPRC% "`
+          EXITCOUNT=`expr $EXITCOUNT + 1`
+          if [ $EXITSTATUS -eq $STATE_CRITICAL ]
+          then
+             EXITSTATUS=$STATE_CRITICAL
+          else
+             EXITSTATUS=$STATE_WARNING
+          fi
+       elif [ $VERBOSE -eq 1 ]
+       then
+          EXITOUTPUT=`echo $EXITOUTPUT "OK:$CALCULATEDFS:$ARGPRC% "`
+       fi
+}
+
+### EOF SECTION
+
+### SECTION - GETOPTS
+
+while getopts "h:r:x:f:c:w:v" OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         r)
+             RHOSTNAME=$OPTARG
+             ;;
+         x)
+             RCOMMAND=$OPTARG
+             ;;
+         f)
+             FORCELIST=$OPTARG
+             ;;
+         c)
+             DEFCRITICAL=$OPTARG
+             ;;
+         w)
+             DEFWARNING=$OPTARG
+             ;;
+         v)
+             VERBOSE=1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+if [[ -z $RHOSTNAME ]] || [[ -z $RCOMMAND ]] 
+then
+     usage
+     exit 1
+fi
+
+### EOF SECTION
+
+### SECTION - SANITY CHECK
+
+if ! [ -f $NRPEBIN ];
+then
+   echo "NRPE binary at $NRPEBIN does not exist."
+   exit -1
+fi
+### EOF SECTION
+
+### SECTION - PLUGIN RUN
+
+NRPECMDOUT=`$NRPEBIN -H $RHOSTNAME -c $RCOMMAND`
+NRPEOUTPUT=`echo $NRPECMDOUT | cut -d '|' -f1`
+NPREPERF=`echo $NRPECMDOUT | cut -d '|' -f2`
+
+### SUBSECTION - HACKY ERROR HANDLING
+if grep -q "not defined" <<< "$NRPEOUTPUT" ; then
+   echo "Remote server replied: $NRPEOUTPUT"
+   exit $STATE_UNKNOWN
+elif grep -q "Invalid host name" <<< "$NRPEOUTPUT"; then
+   echo "Remote server replied: $NRPEOUTPUT"
+   exit $STATE_UNKNOWN
+elif grep -q "not found" <<< "$NRPEOUTOUT"; then
+   echo "Remote server replied: $NRPEOUTPUT"
+   exit $STATE_UNKNOWN
+elif ! grep -qE "OK:0|WARNING:1|CRITICAL:2" <<< "$NRPEOUTPUT"; then
+   echo "Are you sure you are using check_fs on the remote server? Remember to use the v flag."
+   exit $STATE_UNKNOWN 
+fi
+### EOF SUBSECTION
+
+for entry in $NRPEOUTPUT; do
+   MOUNTPOINT=`echo $entry | cut -d: -f3`
+   MOUNTPRC=`echo $entry | cut -d: -f5`
+   buildoutput $MOUNTPOINT $MOUNTPRC
+done
+if [ "$EXITOUTPUT" = "" ] 
+then
+   EXITOUTPUT="FILESYSTEMS OK!"
+   EXITSTATUS=$STATE_O
+fi
+
+### EOF SECTION
+
+echo $EXITOUTPUT"|"$NPREPERF
+exit $EXITSTATUS

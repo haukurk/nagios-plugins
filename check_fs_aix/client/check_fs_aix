@@ -1,0 +1,191 @@
+#!/bin/ksh
+#
+# Copyright (c) 2013, Haukur Kristinsson
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of Haukur Kristinsson nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL Haukur Kristinsson BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+############################################################################
+# Made for AIX (Any Version) (Korn Shell).                                #
+# Depends on /usr/sysv/bin/df and the default /usr/bin/df.                 #
+# Build: v0.6 November 2013.                                               # 
+# ------------------------------------------------------------------------ #
+# Usage: ./check_filesystems_space -w [warning] -c [critical]              # 
+#           [[ -p type pattern]] [[ -e "filesystems to exclude" ]] [[ -v ]]#
+# [warning] : Percentages for WARNING (MANDATORY)                          #
+# [critical] : Percentages for CRITICAL (MANDATORY)                        #
+# [type pattern] : default is "jfs" (OPTIONAL)                               #
+# [filesystems to exclude] : filesystems seperated with a white space      #
+# -- Changelog ----------------------------------------------------------- #
+# v0.6 - Refactoring. Adding perf output. Adding exclude option. Getopts.  #
+# v0.5 - Small output change and a new server-side parser                  # 
+# v0.4 - Include only filesystem type matching a grep pattern                #
+#        This was needed to exclude mounted nfs filesystems                # 
+# v0.3 - For loop could terminate to soon as it breaks after proc            #
+############################################################################
+
+COUNT=0
+OUTPUT=""
+MOUNTTYPE="jfs" # Default type is the pattern jfs (also matches jfs2 etc.)
+WARNING=
+CRITICAL=
+EXCLUDE=""
+VERBOSE=0
+STATE_OK=0
+STATE_WARNING=1
+STATE_CRITICAL=2
+STATE_UNKNOWN=3
+STATE_DEPENDENT=4
+EXITSTATUS=$STATE_UNKNOWN # Default Exit Code as UNKNOWN.
+
+### <summary>
+###  Print out usage help.
+### </summary>
+usage()
+{
+cat << EOF
+usage: $0 options
+
+Filesystems check for AIX V0.6
+
+OPTIONS:
+   -h      Show this message
+   -w      Warning level in percentage (without %).
+   -c      Critical level in percentage (without %).
+   -p      Pattern for filesystem type. Default is jfs* (matches jfs and jfs2).
+   -e      List of filesystems that need to be excluded (seperated with whitespaces). Example -e "/ /tmp /etc" for excluding /, /tmp and /etc filesystems.
+   -v      verbose output (all filesystem status OK;WARNING;CRITICAL)
+EOF
+}
+
+### <summary>
+###  Check if a filesystem is in the exclusion list.
+### </summary>
+### <returns>
+###  prints integer 0, if not in the list. Otherwise 1.
+### </returns>
+isexcluded() {
+       FILESYSTEM=$(echo $1 | cut -d: -f1)
+       MATCHED=0
+       for e in $EXCLUDE; do
+            if [ $FILESYSTEM = $e ]
+            then
+               MATCHED=1
+            fi
+       done
+       print $MATCHED
+}
+
+### GETOPTS
+while getopts "h:w:c:p:e:v" OPTION
+do
+     case $OPTION in
+         h)
+             usage
+             exit 1
+             ;;
+         w)
+             WARNING=$OPTARG
+             ;;
+         c)
+             CRITICAL=$OPTARG
+             ;;
+         e)
+             EXCLUDE=$OPTARG
+             ;;
+         p)
+             MOUNTTYPE=$OPTARG
+             ;;
+         v)
+             VERBOSE=1
+             ;;
+         ?)
+             usage
+             exit
+             ;;
+     esac
+done
+
+### Mandatory Arguments are WARNING and CRITICAL flags.
+if [[ -z $WARNING ]] || [[ -z $CRITICAL ]]
+then
+     usage
+     exit 1
+fi
+
+### Iteration of file systems.
+if [ -n "$WARNING" ] && [ -n "$CRITICAL" ] && [ -n "MOUNTTYPE" ]
+then
+        rawSysVDFRESULTS=`/usr/sysv/bin/df -n | grep -i $MOUNTTYPE | awk -F\: '{print ""$1":"$2""}' | tr -d '\t' | tr -d ' '`
+        for fs in $rawSysVDFRESULTS
+        do
+                ISFILESYSTEMEXCLUDED=`isexcluded $fs`
+                set -A array $(echo $fs | tr ':' '\n')
+                FMOUNT=${array[0]}  
+                FTYPE=${array[1]}   
+                SIZE=`df -k $FMOUNT|grep $FMOUNT|awk '{ print $4; }'`
+                PRC=`echo $SIZE | tr -d "%"`
+                if [ $ISFILESYSTEMEXCLUDED -eq 1 ]
+                then
+                        continue
+                elif [ $PRC -gt $CRITICAL ]
+                then
+                        OUTPUT=`echo $OUTPUT "CRITICAL:$STATE_CRITICAL:$fs:$SIZE:$FTYPE "`
+                        COUNT=`expr $COUNT + 1`
+                        if [ $EXITSTATUS -ne 2 ]
+                        then
+                                EXITSTATUS=$STATE_CRITICAL
+                        fi
+                elif [ $PRC -gt $WARNING ]
+                then
+                        OUTPUT=`echo $OUTPUT "WARNING:$STATE_WARNING:$fs:$SIZE:$FTYPE "`
+                        COUNT=`expr $COUNT + 1`
+                        if [ $EXITSTATUS -eq 2 ]
+                        then
+                                EXITSTATUS=$STATE_CRITICAL
+                        else
+                                EXITSTATUS=$STATE_WARNING
+                        fi
+                elif [ $VERBOSE -eq 1 ]
+                then
+                        OUTPUT=`echo $OUTPUT "OK:$STATE_OK:$fs:$SIZE:$FTYPE "`
+                fi
+        done
+fi
+
+### Decide what is included in the output.
+if [ $COUNT -gt 0 ] 
+then
+        echo $OUTPUT
+else
+        if [ $VERBOSE -eq 1 ]
+        then
+                echo $OUTPUT
+        else
+                echo "OK:FileSystemsOK"
+                EXITSTATUS=$STATE_OK
+        fi
+fi 
+
+### Exit with appropriate exit code.
+exit $EXITSTATUS 
