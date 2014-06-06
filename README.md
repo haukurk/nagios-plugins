@@ -14,4 +14,6 @@ sh install.sh
 
 * AIX filesystem checks
 * Yum Checks
+* Check uptime for Linux
+* Check CPU utilization for Linux
 
