@@ -30,6 +30,7 @@ sed -i 's/allowed_hosts=127.0.0.1/allowed_hosts=192.168.174.46,127.0.0.1/g' $NRP
 sed -i 's/dont_blame_nrpe=0/dont_blame_nrpe=1/g' $NRPE_LOCATION
 
 # Enabling plugins
+mkdir /etc/nrpe.d # Create the folder first.
 grep -w "include_dir=/etc/nrpe.d" $NRPE_LOCATION >/dev/null
 if [ $? -eq 0 ]
 then
