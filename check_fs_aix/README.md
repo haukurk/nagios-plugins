@@ -1,0 +1,1 @@
+# Deprecated - Please use check_disks plugin.

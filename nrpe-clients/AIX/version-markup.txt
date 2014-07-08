@@ -1,0 +1,34 @@
+NRPE - Nagios Remote Plugin Executor
+Copyright (c) 1999-2008 Ethan Galstad (nagios@nagios.org)
+Version: 2.12
+Last Modified: 03-10-2008
+License: GPL v2 with exemptions (-l for more info)
+SSL/TLS Available: Anonymous DH Mode, OpenSSL 0.9.6 or higher required
+
+***************************************************************
+** POSSIBLE SECURITY RISK - COMMAND ARGUMENTS ARE SUPPORTED! **
+**      Read the NRPE SECURITY file for more information     **
+***************************************************************
+
+***************************************************************
+** POSSIBLE SECURITY RISK - TCP WRAPPERS ARE NOT AVAILABLE!  **
+**      Read the NRPE SECURITY file for more information     **
+***************************************************************
+
+Usage: nrpe [-n] -c <config_file> <mode>
+
+Options:
+ -n            = Do not use SSL
+ <config_file> = Name of config file to use
+ <mode>        = One of the following two operating modes:
+   -i          =    Run as a service under inetd or xinetd
+   -d          =    Run as a standalone daemon
+
+Notes:
+This program is designed to process requests from the check_nrpe
+plugin on the host(s) running Nagios.  It can run as a service
+under inetd or xinetd (read the docs for info on this), or as a
+standalone daemon. Once a request is received from an authorized
+host, NRPE will execute the command/plugin (as defined in the
+config file) and return the plugin output and return code to the
+check_nrpe plugin.

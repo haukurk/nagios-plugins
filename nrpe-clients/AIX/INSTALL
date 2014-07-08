@@ -1,0 +1,23 @@
+#
+# NRPE binaries for AIX. Tested on AIX 5.1, AIX 6.1 and AIX 7.1
+# Haukur Kristinsson 2014 - haukur@hauxi.is
+#
+
+## 1. Make sure perl.rte is installed from IBM media disks.
+
+## 2. install OpenSSL RPMs. Recommend to go to http://www.perzl.org/aix/index.php?n=Main.Openssl.
+# rpm -ivh http://www.oss4aix.org/download/RPMS/openssl/openssl-1.0.1g-1.aix5.1.ppc.rpm
+# rpm -ivh http://www.oss4aix.org/download/RPMS/openssl/openssl-devel-1.0.1g-1.aix5.1.ppc.rpm
+
+## 3. uncompress the binary package from /.
+## See the structure created by the archive
+# zcat uncompress nrpe.aix51.61.71.openssl.bin.tar.Z | tar tvf -
+## Uncompress
+# cd / && uncompress nrpe.aix51.61.71.openssl.bin.tar.Z
+# tar xvf nrpe.aix51.61.71.openssl.bin.tar.Z
+
+## 4. Create the init file
+# cp nrpe.init /etc/rc.d/init.d/nrpe 
+# chmod +x /etc/rc.d/init.d/nrpe 
+
+## 5. Modify /usr/local/nagios/etc/nrpe.cfg and rock on.

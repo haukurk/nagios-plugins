@@ -1,7 +1,7 @@
-#### Nagios Related Plugins ####
-This repositoty is for useful Nagios plug-ins that I've been working on over the years. Also I include some plug-ins that are not officially released.
+#### Nagios Related ####
+This repository is for useful Nagios related plugins, binaries and scripts that I've been working on or found over the years. 
 
-#### Installation ####
+#### Plugin Installation ####
 These have only been tested on Centos 6.5 or AIX, depending on which OS the plugin is made for.
 
 Each plugin includes a installation script which you can just run:
@@ -12,8 +12,15 @@ sh install.sh
 
 #### List of plugins ####
 
-* AIX filesystem checks
+* AIX file-system checks *(deprecated, please use check disks plugin)*
 * Yum Checks
 * Check uptime for Linux
 * Check CPU utilization for Linux
+* Check disks (from df outputs) Linux/UNIX/Windows
+
+#### Unofficial Binaries ####
+
+* AIX Binaries for NRPE 2.12
+** Needs openSSL
+** Compiled with argument support
 

@@ -1,0 +1,106 @@
+#!/bin/sh
+#
+# nrpe   Init script for running the nrpe daemon 
+# 
+# Haukur Kristinsson 2014 haukur@hauxi.is
+#
+
+nrped="/usr/local/nagios/bin/nrpe"
+pidfile="/var/run/nrpe.pid"
+service="nrpe"
+configfile="/usr/local/nagios/etc/nrpe.cfg"
+
+# define some generic commands
+AWK=/usr/bin/awk
+CAT=/usr/bin/cat
+ECHO=/usr/bin/echo
+GREP=/usr/bin/grep
+KILL=/usr/bin/kill
+MKDIR=/usr/bin/mkdir
+PRINTF=/usr/bin/printf
+PS=/usr/bin/ps
+RM=/usr/bin/rm
+
+
+# Check that the binary exists
+if ! [ -f $nrped ]; then
+    $ECHO "$nrped binary not found"
+    exit 0
+fi
+
+
+start()
+{
+    if [ -r ${pidfile} ]; then
+        pid=`$CAT ${pidfile}`
+        if [ "`$PS -ef | $GREP ${service} | $AWK '{ print $2 }' | $GREP ${pid}`" = "${pid}" ] ; then
+            $ECHO "The NRPE daemon is already running with PID ${pid}"
+            exit 1
+        else
+            $RM -f ${pidfile}
+        fi
+    fi
+    $PRINTF "Starting NRPE... "
+    $nrped -c $configfile -d 
+    RETVAL=$?
+    $ECHO "done."
+    return $RETVAL
+}
+
+# 'stop' is a command on AIX
+ppstop() {
+    $PRINTF "Shutting down NRPE... "
+    RETVAL=1
+    if [ -r ${pidfile} ]; then
+        $KILL -KILL `$CAT ${pidfile}`
+        RETVAL=$?
+    fi
+    if [ $RETVAL -eq 0 ];then
+        $RM -f ${pidfile}
+        $ECHO "done."
+    else
+        $ECHO "nothing to stop"
+    fi
+    return $RETVAL
+}
+
+restart() {
+    ppstop
+    start
+}
+
+status() {
+    if [ -r ${pidfile} ]; then
+        pid=`$CAT ${pidfile}`
+        if [ "`$PS -ef | $GREP ${service} | $AWK '{ print $2 }' | $GREP ${pid}`" = "${pid}" ] ; then
+            $ECHO "The NRPE daemon is running with PID ${pid}"
+        else
+            $ECHO "Daemon dead but pidfile exists."
+            $ECHO ${pidfile}
+        fi
+    else
+        $ECHO "The NRPE daemon is not running."
+        exit 1
+    fi
+}
+
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        ppstop
+        ;;
+    restart)
+        restart
+        ;;
+    status)
+        status
+        ;;
+    *)
+        echo "Usage: $service {start|stop|restart|status}"
+        RETVAL=2
+        ;;
+esac
+exit $RETVAL

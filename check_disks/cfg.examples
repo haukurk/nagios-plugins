@@ -1,0 +1,58 @@
+# COMMAND
+define command {
+	command_name    windows-check_disks
+	command_line	$USER1$/check_disks.pl -H $HOSTADDRESS$  -v $ARG1$ $ARG2$ $ARG3$ $ARG4$ $ARG5$ $ARG6$ $ARG6$ $ARG6$
+}
+
+# SERVICE TEMPLATES
+
+define service {
+	use                           samskip-windows-service
+	name                          samskip-windows-check_disks
+	service_description	Disk Usage
+	__EXTRAOPTS		
+	check_command                 samskip-windows-check_disks!$_SERVICE_EXTRAOPTS$
+	register		0
+}
+
+define service {
+	use                           samskip-linux-service
+	name                          samskip-linux-check_disks
+	service_description	Disk Usage
+	__EXTRAOPTS		
+	check_command                 samskip-linux-check_disks!$_SERVICE_EXTRAOPTS$
+	register		0
+}
+
+
+# SERVICE Windows
+
+# default windows-check_disks
+# warns if disk usage exceeds certain thresholds
+# __EXTRAOPTS = Use this to set thresholds for specific disks
+# Example: __EXTRAOPTS -f /C:10:5,/F:0:0
+define service {
+	use			windows-check_disks
+	host_name		node02.hauxi.is
+	contact_groups		os-windows
+	service_description	Disk Usage
+	#__EXTRAOPTS		-f /C:10:5
+}
+
+# Service UNIX/Linux
+
+# linux-check_disks
+# check disk usage on linux host
+# __EXTRAOPTS = Optional Extra arguments to pass into disks
+define service {
+	use			samskip-linux-check_disks
+	host_name		chopin.samskip.is
+	contact_groups		os-linux
+
+	#service_description	Disk Usage
+	#__EXTRAOPTS		-f /var:10:5,/boot:0:0
+}
+
+
+
+
